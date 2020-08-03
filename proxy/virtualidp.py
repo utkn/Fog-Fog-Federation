@@ -8,7 +8,7 @@ from authlib.oidc.core import UserInfo
 from werkzeug.security import gen_salt
 
 import virtualidp_grants
-from models import OAuth2AuthorizationCode, OAuth2Client, User
+from oidc_models import OAuth2AuthorizationCode, OAuth2Client, User
 
 def read_file(path):
     with open(path, 'r') as file:
@@ -118,7 +118,6 @@ class VirtualIdP:
             query_client=query_client,
             save_token=save_token
         )
-
         # support all openid grants
         self.server.register_grant(virtualidp_grants.AuthorizationCodeGrant, [
             virtualidp_grants.OpenIDCode(require_nonce=True),

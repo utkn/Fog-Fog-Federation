@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'app',
     'oidc_provider',
+    "sslserver"
 ]
 
 MIDDLEWARE_CLASSES = [
@@ -87,5 +88,5 @@ LOGIN_REDIRECT_URL = '/'
 
 # OIDC Provider settings
 
-SITE_URL = 'http://localhost:8000'
+SITE_URL = 'https://172.21.0.112:8000'
 OIDC_SESSION_MANAGEMENT_ENABLE = True

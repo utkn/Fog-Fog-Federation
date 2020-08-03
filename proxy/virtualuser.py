@@ -9,6 +9,7 @@ from flask import jsonify
 class VirtualUser(object):
     def __init__(self):
         self.session = requests.Session()
+        self.session.verify = False
         self.waiting_consent_page = None
         self.token = None
     
@@ -41,7 +42,9 @@ class VirtualUser(object):
                 'csrfmiddlewaretoken': csrf_token, 
                 'next': nxt,
                 'username': self.username, 
-                'password': self.password})
+                'password': self.password}, headers={'referer': login_page_url})
+            print("LOGIN PAGE URL: ", login_page_url)
+            print("CONSENT PAGE URL: ", consent_response.url)
             # if we were not redirected away from the login page, login was unsuccessful
             if consent_response.url == login_page_url:
                 return False
@@ -64,7 +67,7 @@ class VirtualUser(object):
         state = consent_response_parsed.find('input', {'name': 'state'})['value']
         nonce = consent_response_parsed.find('input', {'name': 'nonce'})['value']
         # then, scrap the page for additional info to bypass CSRF checks
-        csrf_token = consent_response_parsed.find('input', {'name': 'csrfmiddlewaretoken'})['value']        
+        csrf_token = consent_response_parsed.find('input', {'name': 'csrfmiddlewaretoken'})['value']
         authorize_response = self.session.post(consent_url, data={
             'allow': 'Accept',
             'csrfmiddlewaretoken': csrf_token,
@@ -73,7 +76,8 @@ class VirtualUser(object):
             'response_type': response_type,
             'scope': scope,
             'state': state,
-            'nonce': nonce})
+            'nonce': nonce}, headers={'referer': consent_url})
+        print(authorize_response.text)
         self.token = json.loads(authorize_response.text)
         # return the token
         return self.token

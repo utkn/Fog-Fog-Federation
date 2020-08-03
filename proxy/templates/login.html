@@ -1,9 +1,15 @@
 {% if error %} {{ error }} <hr> {% endif %}
 <form action="" method="post">
-    <p>Please provide the credentials:</p>
+    <p>Please provide the credentials and choose the home provider:</p>
     <div>
-      <input type="text" name="username">
-      <input type="password" name="password">
+      <input type="text" name="username" placeholder="Username">
+      <br><input type="password" name="password" placeholder="Password">
+      <br>
+      <select name="service">
+        {% for service in services %}
+          <option value="{{ service.id }}">{{ service.name }}</option>
+        {% endfor %}
+      </select>
     </div>
     <br>
     <button>Submit</button>

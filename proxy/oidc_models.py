@@ -1,14 +1,13 @@
-from flask_sqlalchemy import SQLAlchemy
 from authlib.integrations.sqla_oauth2 import (
     OAuth2ClientMixin,
     OAuth2TokenMixin,
     OAuth2AuthorizationCodeMixin
 )
 
+from proxy_models import db
+
 # TODO remove SQLAlchemy dependency!! The only reason we use mixins is because the methods 
 # are already implemented.
-
-db = SQLAlchemy()
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
