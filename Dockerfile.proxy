@@ -1,0 +1,25 @@
+FROM python:3.8-slim-buster
+
+# Create the virtual environment.
+ENV VIRTUAL_ENV=/opt/venv
+RUN python3 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Copy the files.
+COPY ./proxy/requirements.txt ./requirements.txt
+
+# Install proxy dependencies.
+RUN pip install -r requirements.txt
+
+# Install scapy dependencies.
+RUN apt-get update && \
+    apt-get install -y wpasupplicant && \
+    apt-get install -y tcpdump
+
+
+# Set development mode.
+ENV FLASK_ENV=development
+
+# Disable SSL checks for development purposes.
+ENV AUTHLIB_INSECURE_TRANSPORT=true
+ENV CURL_CA_BUNDLE=""

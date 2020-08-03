@@ -1,0 +1,137 @@
+version: '3'
+
+services:
+    # Firefox interface
+    user:
+        image: jlesage/firefox
+        ports:
+        - "5800:5800"
+        volumes:
+        - "./userdata:/config:rw"
+        networks:
+            foreign_oidc_net:
+                ipv4_address: 172.20.0.110
+        security_opt:
+            - seccomp:unconfined
+        shm_size: 2g
+
+    # Proxy
+    proxy:
+        build:
+            context: .
+            dockerfile: Dockerfile.proxy
+        image: 'federation/proxy:latest'
+        command: >
+            sh -c "cd src && flask run --port=5000 --host=0.0.0.0"
+        tty: true
+        networks:
+            foreign_oidc_net:
+                ipv4_address: 172.20.0.111
+            home_oidc_net:
+                ipv4_address: 172.21.0.111
+            home_dotonex_net:
+                ipv4_address: 172.22.0.111
+            00home_dotonex_proxy_net:
+                ipv4_address: 172.23.0.111
+        cap_add:
+            - ALL
+        volumes:
+            - "./proxy:/src"
+            - ./proxy/wpasupplicant/:/tmp/wpasupplicant/
+            - ./proxy/wpasupplicant/cert/:/tmp/cert/
+
+    # Simple Flask OIDC Client
+    foreign_oidc_rp:
+        build:
+            context: .
+            dockerfile: Dockerfile.foreign_oidc_rp
+        image: 'federation/foreign_oidc_rp:latest'
+        command: >
+            sh -c "cd src && flask run --port=3000 --host=0.0.0.0"
+        tty: true
+        networks:
+            foreign_oidc_net:
+                ipv4_address: 172.20.0.112
+        cap_add:
+            - ALL
+        volumes:
+            - "./foreign_oidc_rp:/src"
+
+    # Django OIDC Server
+    home_oidc_idp:
+        build:
+            context: .
+            dockerfile: Dockerfile.home_oidc_idp
+        image: 'federation/home_oidc_idp:latest'
+        command: >
+            sh -c "cd src && 
+            python manage.py migrate &&
+            python manage.py creatersakey && 
+            python manage.py runsslserver 0.0.0.0:8000"
+        tty: true
+        # for debugging purposes.
+        ports:
+            - "8000:8000"
+        networks:
+            home_oidc_net:
+                ipv4_address: 172.21.0.112
+        cap_add:
+            - ALL
+        volumes:
+            - "./home_oidc_idp:/src"
+    
+    # Chewie
+    home_dotonex_ap:
+        build:
+            context: .
+            dockerfile: Dockerfile.home_dotonex_ap
+        image: 'federation/home_dotonex_ap:latest'
+        command: 'chewie --interface eth0 --radius_ip 172.22.0.113'
+        networks:
+            00home_dotonex_proxy_net:
+                ipv4_address: 172.23.0.112
+            home_dotonex_net:
+                ipv4_address: 172.22.0.112
+        # Needed for vSupplicant (Proxy) <-> AP communication.
+        mac_address: 02:42:AC:17:00:70
+        cap_add:
+            - ALL
+        volumes:
+            - "./home_dotonex_ap/:/chewie-src/"
+    
+    # RADIUS server
+    home_dotonex_as:
+        build:
+            context: .
+            dockerfile: Dockerfile.home_dotonex_as
+        image: 'federation/home_dotonex_as:latest'
+        networks:
+            home_dotonex_net:
+                ipv4_address: 172.22.0.113
+        volumes:
+            - "./home_dotonex_as/freeradius/users:/etc/freeradius/3.0/users:ro"
+            - "./home_dotonex_as/freeradius/certs:/etc/freeradius/3.0/certs"
+            - "./home_dotonex_as/freeradius/default/eap:/etc/freeradius/3.0/mods-enabled/eap:ro"
+            - "./home_dotonex_as/freeradius/clients.conf:/etc/freeradius/3.0/clients.conf:ro"
+
+networks:
+    foreign_oidc_net:
+        driver: bridge
+        ipam:
+            config:
+                - subnet: 172.20.0.0/16
+    home_oidc_net:
+        driver: bridge
+        ipam:
+            config:
+                - subnet: 172.21.0.0/16
+    home_dotonex_net:
+        driver: bridge
+        ipam:
+            config:
+                - subnet: 172.22.0.0/16
+    00home_dotonex_proxy_net:
+        driver: macvlan
+        ipam:
+            config:
+                - subnet: 172.23.0.0/16

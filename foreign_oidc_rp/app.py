@@ -2,7 +2,7 @@ from authlib.integrations.flask_client import OAuth
 from flask import Flask, redirect, render_template, request, session, url_for
 
 client_id = "017264"
-proxy_addr = "http://localhost:5000/idp"
+proxy_addr = "http://172.20.0.111:5000/idp"
 
 app = Flask(__name__)
 app.secret_key = 'secret'
