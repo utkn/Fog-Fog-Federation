@@ -1,0 +1,8 @@
+FROM faucet/python3:4.0.0
+
+COPY ./ /chewie-src/
+
+RUN apk add -U git gcc python3-dev musl-dev && \
+    pip3 --no-cache-dir install --upgrade /chewie-src/
+
+CMD ["chewie"]

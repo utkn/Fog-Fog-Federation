@@ -1,0 +1,5 @@
+codecov
+pylint
+pytest
+pytest-cov
+pytype==2019.12.17
