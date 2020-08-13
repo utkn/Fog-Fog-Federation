@@ -1,0 +1,27 @@
+FROM ubuntu:18.04
+
+COPY ./openpana /openpana
+
+RUN apt-get clean && apt-get update && \
+    apt-get install -y sed && \
+    apt-get install -y libssl-dev libxml2-dev && \
+    apt-get install -y gcc && \
+    apt-get install -y build-essential automake autoconf libtool
+
+RUN cd openpana && \
+    ./autogen.sh && \
+    ./configure --sysconfdir=/etc/openpana
+
+RUN cd openpana/src && \
+    sed -i '/^DBG_LINKOPT =.*/c\DBG_LINKOPT = ' Makefile
+
+RUN cd openpana && \
+    make && make install
+
+COPY ./openpana/modified_config.xml /etc/openpana/config.xml
+COPY ./openpana/radius_conf/eap-tls/server/ca.pem /etc/openpana/ca.pem
+COPY ./openpana/radius_conf/eap-tls/server/server.key /etc/openpana/server.key
+COPY ./openpana/radius_conf/eap-tls/server/server.pem /etc/openpana/server.pem
+
+
+

@@ -1,6 +1,7 @@
 FROM ubuntu:18.04
 
 RUN apt-get update && \
-    apt-get install -y wpasupplicant
+    apt-get install -y wpasupplicant && \
+    apt-get install -y net-tools
 
-CMD ["sleep", "infinity"]
+CMD ["sh", "-c", "tail -f /dev/null"]

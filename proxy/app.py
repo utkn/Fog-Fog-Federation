@@ -10,6 +10,7 @@ from virtualidp import (VirtualIdP, read_file,
 from virtualrp import VirtualRP
 from virtualuser import VirtualUser
 from virtualsupplicant import VirtualSupplicant
+from virtualpac import VirtualPaC
 from proxy_models import *
 import jwt
 
@@ -18,7 +19,8 @@ proxy_idp_address = 'http://0.0.0.0:5000/idp'
 vuser = VirtualUser()
 vrp = VirtualRP()
 vidp = VirtualIdP()
-vsupplicant = VirtualSupplicant("eth0")
+vsupplicant = VirtualSupplicant('eth0')
+vpac = VirtualPaC()
 
 def create_app(config=None):
     app = Flask(__name__)
@@ -50,9 +52,10 @@ def initdb():
     # create the database
     db.create_all()
     # initialize the services preemptively
-    a = HomeService(name="Home A", auth_type="OIDC", auth_endpoint="https://172.21.0.112:8000")
-    b = HomeService(name="Home B", auth_type="802.1x", auth_endpoint="02:42:AC:17:00:70")
-    db.session.add(OIDCService(client_id="017264", scope="openid", home_service=a))
+    a = HomeService(name='Home A', auth_type='OIDC', auth_endpoint='https://172.21.0.112:8000')
+    b = HomeService(name='Home B', auth_type='802.1x', auth_endpoint='02:42:AC:17:00:70')
+    c = HomeService(name='Home C', auth_type='PANA', auth_endpoint='172.25.0.113')
+    db.session.add(OIDCService(client_id='017264', scope='openid', home_service=a))
     db.session.add(OneXService(home_service=b))
     db.session.commit()
 
@@ -104,10 +107,12 @@ def authorize():
                         request.args.get('redirect_uri'), request.args.get('scope'), request.args.get('response_type'))
     # try to log in with the virtual user + virtual RP or through the virtual supplicant.
     login_successful = False
-    if session['home_auth_type'] == 'OIDC':
+    if session['auth_type'] == 'OIDC':
         login_successful = vuser.login(url_for('login', _external=True))
-    elif session['home_auth_type'] == '802.1x':
+    elif session['auth_type'] == '802.1x':
         login_successful = vsupplicant.login()
+    elif session['auth_type'] == 'PANA':
+        login_successful = vpac.login()
     # if the login was not successful, remove the stored credentials.
     if not login_successful:
         vidp.remove_user()
@@ -121,11 +126,11 @@ def authorize():
         except OAuth2Error as error:
             return jsonify(dict(error.get_body()))
         return render_template('authorize.html', user=vidp.user, grant=grant)
-    # happily accept the consent in the case of 802.1x, as we are already authenticated.
-    if session['home_auth_type'] == '802.1x' and request.form.get('confirm'):
+    # happily accept the consent in the case of non-OIDC method, as we are already authenticated.
+    if session['auth_type'] != 'OIDC' and request.form.get('confirm'):
         grant_user = vidp.user
     # in the case of OIDC, when the user consents, try to also give consent through the virtual user.
-    elif session['home_auth_type'] == 'OIDC' and request.form.get('confirm'):
+    elif request.form.get('confirm'):
         token = vuser.give_consent()
         if token is None:
             return "could not give consent"
@@ -145,8 +150,8 @@ def receive_credentials():
         service = HomeService.query.filter_by(id=service_id).first()
         # create a temporary user for the virtual provider
         vidp.generate_user(username)
-        session['home_auth_type'] = service.auth_type
-        if service.auth_type == "OIDC":
+        session['auth_type'] = service.auth_type
+        if service.auth_type == 'OIDC':
             # set the credentials of the virtual user
             vuser.set_credentials(username, password)
             # assign the client information of home provider with the virtual RP.
@@ -154,9 +159,14 @@ def receive_credentials():
             vrp.set_idp(service.auth_endpoint)
             vrp.set_client_info(oidc_service.client_id, '', oidc_service.scope)
             return redirect(request.args.get('next'))
-        elif service.auth_type == "802.1x":
+        elif service.auth_type == '802.1x':
             vsupplicant.set_credentials(username, password)
             return redirect(request.args.get('next'))
+        elif service.auth_type == 'PANA':
+            vpac.set_credentials(username, password)
+            vpac.set_endpoint(service.auth_endpoint)
+            return redirect(request.args.get('next'))
+
     # if the credentials are not yet provided, show the login form.
     return render_template('login.html', services=HomeService.query.all(), error=request.args.get('error'))
 
@@ -169,33 +179,8 @@ def issue_token():
     vuser.reset_credentials()
     vuser.session.cookies.clear()
     vsupplicant.reset_credentials()
+    vpac.reset_credentials()
     vidp.remove_user()
-    # if the token was constructed successfully, we need to construct the actual token to send back
-    # by merging two tokens (the one we have received from home idp and the one constructed by vidp).
-    # we do this because we want to directly route the received claims from the home idp.
-    if vidp_token_response.status_code == 200:
-        return vidp_token_response
-        # vidp_token = vidp_token_response.json
-        # home_token = vrp.unparsed_token
-        # home_token_claims = jwt.decode(home_token['id_token'], verify=False)
-        # vidp_token_claims = jwt.decode(vidp_token['id_token'], verify=False)
-        # # fix the payload information that will be used for verification.
-        # home_token_claims['nonce'] = vidp_token_claims['nonce']
-        # home_token_claims['at_hash'] = vidp_token_claims['at_hash']
-        # home_token_claims['iss'] = vidp_token_claims['iss']
-        # # we will use the vidp headers directly as the id token will be signed by our own key.
-        # vidp_token_headers = jwt.get_unverified_header(vidp_token['id_token'])
-        # # create the token.
-        # new_token = {
-        #     'access_token': vidp_token['access_token'],
-        #     'expires_in': home_token['expires_in'],
-        #     'scope': vidp_token['scope'],
-        #     'token_type': vidp_token['token_type']
-        # }
-        # # create the id token from the modified claims and vidp headers with vidp's private key.
-        # new_token['id_token'] = jwt.encode(home_token_claims, vidp_private_key, algorithm='RS256', headers=vidp_token_headers) \
-        #                         .decode('utf-8')
-        # return jsonify(new_token)
     return vidp_token_response
 
 # vIdP discovery endpoint (where we publish the provider configuration, like supported signing methods.)

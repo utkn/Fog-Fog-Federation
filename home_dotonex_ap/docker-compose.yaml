@@ -10,6 +10,9 @@ services:
         networks:
             00wpasupplicant-net:
                 ipv4_address: 172.23.0.111
+            01radius-net:
+                ipv4_address: 172.24.0.111
+                priority: 100
         cap_add:
             - ALL
         volumes:

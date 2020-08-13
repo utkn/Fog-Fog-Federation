@@ -27,13 +27,14 @@ class VirtualSupplicant(object):
     def reset_credentials(self):
         self.username = None
         self.password = None
+        self.authenticated = False
     
     def login(self):
         # first, create the configuration files.
         with open('wpasupplicant/wired-md5.conf', 'w') as configfile:
             configfile.write(config_file_template.format(username=self.username, password=self.password))
         # then, run the authentication procedure.
-        cmd = "wpa_supplicant -dd -c/tmp/wpasupplicant/wired-md5.conf -ieth0 -Dwired"
+        cmd = 'wpa_supplicant -dd -c/tmp/wpasupplicant/wired-md5.conf -ieth0 -Dwired'
         proc = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE)
         try:
             # run the wpa supplicant for 5 seconds.
@@ -42,9 +43,8 @@ class VirtualSupplicant(object):
             # kill the supplicant.
             proc.kill()
             output, _ = proc.communicate()
-            str_output = str(output)
             # check the results.
-            if "result=SUCCESS" in str_output:
+            if 'result=SUCCESS' in str(output):
                 self.authenticated = True
                 return True
             else:

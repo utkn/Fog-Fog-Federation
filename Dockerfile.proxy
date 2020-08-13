@@ -1,4 +1,14 @@
-FROM python:3.8-slim-buster
+FROM ubuntu:18.04
+
+# Install python
+RUN apt-get update && \
+    apt-get install -y software-properties-common && \
+    add-apt-repository ppa:deadsnakes/ppa && \
+    apt-get update && \
+    apt-get install -y python3 python3-venv
+
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
 
 # Create the virtual environment.
 ENV VIRTUAL_ENV=/opt/venv
@@ -12,14 +22,38 @@ COPY ./proxy/requirements.txt ./requirements.txt
 RUN pip install -r requirements.txt
 
 # Install scapy dependencies.
-RUN apt-get update && \
+RUN apt-get install -y net-tools && \
     apt-get install -y wpasupplicant && \
     apt-get install -y tcpdump
 
 
-# Set development mode.
+# Set Flask development mode.
 ENV FLASK_ENV=development
 
 # Disable SSL checks for development purposes.
 ENV AUTHLIB_INSECURE_TRANSPORT=true
 ENV CURL_CA_BUNDLE=""
+
+# Now, install OpenPANA. Proxy uses the PaC module.
+COPY ./openpana /openpana
+
+RUN apt-get clean && apt-get update && \
+    apt-get install -y sed && \
+    apt-get install -y libssl-dev libxml2-dev && \
+    apt-get install -y gcc && \
+    apt-get install -y build-essential automake autoconf libtool
+
+RUN cd openpana && \
+    ./autogen.sh && \
+    ./configure --sysconfdir=/etc/openpana
+
+RUN cd openpana/src && \
+    sed -i '/^DBG_LINKOPT =.*/c\DBG_LINKOPT = ' Makefile
+
+RUN cd openpana && \
+    make && make install
+
+COPY ./openpana/modified_config.xml /etc/openpana/config.xml
+COPY ./openpana/radius_conf/eap-tls/client/ca.pem /etc/openpana/ca.pem
+COPY ./openpana/radius_conf/eap-tls/client/client.pem /etc/openpana/client.pem
+COPY ./openpana/radius_conf/eap-tls/client/client.pk8 /etc/openpana/client.pk8
